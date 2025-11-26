@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>나만의 마을 꾸미기 3D</title>
+
+<style>
+  :root{
+    --text:#ffffff;
+    --muted:rgba(255,255,255,.8);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;
+    overflow:hidden;
+    font-family:"Noto Sans KR",ui-sans-serif,system-ui;
+    background:linear-gradient(to bottom,#66b8ff 0%,#2a97ff 45%,#0074d1 100%);
+    color:var(--text);
+  }
+
+  #webgl{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+    z-index:0;
+  }
+
+  .icon-water{
+    width:22px;height:22px;
+    vertical-align:middle;margin-right:6px;
+  }
+  .icon-water-big{
+    width:30px;height:30px;
+    vertical-align:middle;margin-right:8px;
+  }
+
+  .aurora{
+    position:fixed; inset:0; z-index:2; pointer-events:none;
+    mix-blend-mode:screen; opacity:0.9;
+    background:
+      radial-gradient(circle at -10% -10%, rgba(255,180,255,0.65) 0%, rgba(180,90,255,0.38) 20%, rgba(110,40,210,0.25) 40%, rgba(40,10,120,0.05) 70%, transparent 100%),
+      linear-gradient(to bottom, rgba(110,50,210,0.25) 0%, rgba(80,40,190,0.12) 25%, rgba(40,20,120,0.05) 50%, transparent 100%);
+    filter: blur(18px);
+    animation: auroraFloat 18s ease-in-out infinite alternate;
+  }
+  @keyframes auroraFloat{
+    0%{ transform:translateX(0) translateY(0); opacity:.92; }
+    50%{ transform:translateX(2%) translateY(1.8%); opacity:1; }
+    100%{ transform:translateX(-1.4%) translateY(0); opacity:.9; }
+  }
+
+  .ui-layer{
+    position:relative;
+    width:100%;
+    height:100vh;
+    pointer-events:none;
+    z-index:5;
+  }
+
+  .dock{
+    position:absolute;
+    top:20px;
+    left:20px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    pointer-events:auto;
+    z-index:6;
+  }
+  .dock button{
+    width:44px;
+    height:44px;
+    border:none;
+    border-radius:999px;
+    background:rgba(255,255,255,.22);
+    backdrop-filter:blur(6px);
+    display:grid;
+    place-items:center;
+    cursor:pointer;
+    box-shadow:0 6px 16px rgba(0,0,0,.25);
+    transition:transform .12s, filter .12s;
+  }
+  .dock button:hover{
+    transform:translateY(-2px);
+    filter:brightness(1.05);
+  }
+  .ico{
+    width:20px;
+    height:20px;
+    fill:#fff;
+    opacity:.95;
+  }
+
+  .meter{
+    position:absolute;
+    left:50%;
+    top:6vh;
+    transform:translateX(-50%);
+    text-align:center;
+    pointer-events:auto;
+  }
+  .clock{
+    font-size:clamp(28px,5vw,52px);
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 2px 10px rgba(0,0,0,.35);
+  }
+  .score-text{
+    margin-top:6px;
+    font-size:clamp(18px,3vw,26px);
+    font-weight:700;
+    text-shadow:0 1px 8px rgba(0,0,0,.3);
+  }
+
+  .click-gains{
+    position:relative;
+    width:100%;
+    height:40px;
+    margin-top:4px;
+    overflow:visible;
+    pointer-events:none;
+  }
+  .click-gain{
+    position:absolute;
+    left:50%;
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-size:16px;
+    font-weight:700;
+    transform:translate(-50%, 16px);
+    opacity:1;
+    text-shadow:0 1px 4px rgba(0,0,0,.35);
+    animation:clickGainFloat .7s ease-out forwards;
+  }
+  .click-gain img{
+    width:18px;
+    height:18px;
+    margin:0;
+  }
+  @keyframes clickGainFloat{
+    0%{ opacity:1; transform:translate(-50%, 12px); }
+    100%{ opacity:0; transform:translate(-50%, -12px); }
+  }
+
+  .popup{
+    position:absolute;
+    top:88px;
+    left:20px;
+    z-index:10;
+    width:min(360px, calc(100vw - 40px));
+    background:rgba(5,40,90,.55);
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:16px;
+    backdrop-filter:blur(10px);
+    box-shadow:0 18px 48px rgba(0,0,0,.35);
+    display:none;
+    pointer-events:auto;
+  }
+  .popup.open{ display:block; }
+  .pop-hd{
+    padding:12px 14px;
+    border-bottom:1px solid rgba(255,255,255,.35);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .pop-title{ font-weight:800; }
+  .pop-close{
+    background:none;
+    border:none;
+    font-size:18px;
+    color:#fff;
+    cursor:pointer;
+  }
+  .goods{ padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .item{
+    padding:10px 12px;
+    background:rgba(255,255,255,.15);
+    border-radius:12px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    cursor:pointer;
+    transition:transform .12s, filter .12s;
+  }
+  .item:hover{ transform:translateY(-2px); filter:brightness(1.05); }
+  .item.owned{ opacity:.45; pointer-events:none; }
+  .item.locked{
+    opacity:.3;
+    filter:grayscale(.5);
+    pointer-events:none;
+  }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+
+<body>
+
+<div class="aurora"></div>
+<canvas id="webgl"></canvas>
+
+<div class="ui-layer">
+  <div class="dock">
+    <button id="btnShop">
+      <svg class="ico" viewBox="0 0 24 24">
+        <path d="M3 9l2-5h14l2 5v2a3 3 0 01-3 3v5h-4v-5H10v5H6v-5a3 3 0 01-3-3V9zm3 0h12l-1.2-3H7.2L6 9z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="meter">
+    <div class="clock" id="clock">00:00:00</div>
+    <div class="score-text">
+      <img src="water.png" class="icon-water-big">
+      <span id="score">00000000</span>
+    </div>
+    <div id="clickGains" class="click-gains"></div>
+  </div>
+
+  <div class="popup" id="shopPopup">
+    <div class="pop-hd">
+      <div class="pop-title">상점</div>
+      <button class="pop-close" id="shopClose">✕</button>
+    </div>
+    <div class="goods" id="goods">
+      <div class="item" data-key="coral" data-price="20">
+        <div class="iname">산호</div>
+        <div class="price">
+          <img src="water.png" class="icon-water">20
+        </div>
+      </div>
+      <div class="item locked" data-key="seaweed" data-price="50">
+        <div class="iname">해초</div>
+        <div class="price">
+          <img src="water.png" class="icon-water">50
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const canvas3D = document.getElementById('webgl');
+const scene = new THREE.Scene();
+
+/* 카메라 */
+const camera = new THREE.PerspectiveCamera(
+  45,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  500
+);
+camera.position.set(18, 4, 10);
+
+const controls = new OrbitControls(camera, canvas3D);
+controls.enableDamping = true;
+controls.target.set(-5, 1, 3);
+controls.update();
+
+/* 렌더러 */
+const renderer = new THREE.WebGLRenderer({
+  canvas: canvas3D,
+  antialias: true,
+  alpha: true
+});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+/* 라이트 */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x335577, 1.1));
+const dir = new THREE.DirectionalLight(0xffffff, 1);
+dir.position.set(15, 25, 10);
+scene.add(dir);
+
+/* 텍스처 */
+const texLoader = new THREE.TextureLoader();
+const gradientMap = texLoader.load(
+  'https://threejs.org/examples/textures/gradientMaps/threeTone.jpg'
+);
+gradientMap.minFilter = THREE.NearestFilter;
+gradientMap.magFilter = THREE.NearestFilter;
+
+const waterTexture = texLoader.load('water.png');
+
+/* Toon Material */
+function applyToonMaterial(root){
+  root.traverse(obj=>{
+    if(!obj.isMesh) return;
+    const old = obj.material || {};
+    const mat = new THREE.MeshToonMaterial({
+      color: old.color ? old.color.clone() : new THREE.Color(0xffffff),
+      map: old.map || null,
+      gradientMap
+    });
+    if(old.transparent) mat.transparent = true;
+    if(typeof old.opacity === 'number') mat.opacity = old.opacity;
+    if(old.skinning || obj.isSkinnedMesh) mat.skinning = true;
+    if(old.morphTargets) mat.morphTargets = true;
+    if(old.morphNormals) mat.morphNormals = true;
+    mat.side = old.side ?? THREE.FrontSide;
+    obj.material = mat;
+  });
+}
+
+/* 모델 로드 */
+const loader = new GLTFLoader();
+let rock;
+let coralTemplate;
+let seaweedTemplate;
+const coralInstances = [];
+const seaweedInstances = [];
+
+loader.load('rock.gltf', gltf=>{
+  rock = gltf.scene;
+  rock.scale.set(8,8,8);
+  rock.position.y = -0.4;
+  applyToonMaterial(rock);
+  scene.add(rock);
+});
+
+loader.load('coral.gltf', gltf=>{
+  coralTemplate = gltf.scene;
+  coralTemplate.scale.set(6,6,6);
+  applyToonMaterial(coralTemplate);
+});
+
+loader.load('seaweed.gltf', gltf=>{
+  seaweedTemplate = gltf.scene;
+  seaweedTemplate.scale.set(5,5,5);
+  applyToonMaterial(seaweedTemplate);
+});
+
+/* ───── Wobble 설정: 아주 살짝, 각도 위주 ───── */
+function setupWobble(obj,{rotAmpMin,rotAmpMax,posAmpMin,posAmpMax,freqMin,freqMax}){
+  obj.userData.wobble = {
+    baseRotZ: obj.rotation.z,
+    basePosZ: obj.position.z,
+    ampRotZ: rotAmpMin + Math.random()*(rotAmpMax-rotAmpMin),
+    ampPosZ: posAmpMin + Math.random()*(posAmpMax-posAmpMin),
+    freq:    freqMin + Math.random()*(freqMax-freqMin),
+    phase:   Math.random()*Math.PI*2
+  };
+}
+
+/* 산호 배치 */
+function placeCoral(){
+  if(!coralTemplate) return;
+  const c = coralTemplate.clone();
+  c.position.set(-1, -1, 3);
+
+  setupWobble(c,{
+    // 각도 0.5~1.2도 정도
+    rotAmpMin:0.01, rotAmpMax:0.02,
+    // 위치는 거의 안 보일 정도로 작게
+    posAmpMin:0.02, posAmpMax:0.04,
+    freqMin:0.25,  freqMax:0.4
+  });
+
+  scene.add(c);
+  coralInstances.push(c);
+}
+
+/* 해초 배치 */
+function placeSeaweed(){
+  if(!seaweedTemplate) return;
+  const s = seaweedTemplate.clone();
+  s.position.set(-4, -1, 2.5);
+
+  setupWobble(s,{
+    // 해초가 살짝 더 유연하게
+    rotAmpMin:0.015, rotAmpMax:0.03,
+    posAmpMin:0.025, posAmpMax:0.05,
+    freqMin:0.3,  freqMax:0.55
+  });
+
+  scene.add(s);
+  seaweedInstances.push(s);
+}
+
+/* ───── coral 위 water +10 floating ───── */
+function makeTextSprite(text){
+  const canvas = document.createElement('canvas');
+  const size = 256;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0,0,size,size);
+  ctx.font = 'bold 150px "Noto Sans KR", system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'white';
+  ctx.fillText(text, size*0.55, size*0.5);
+
+  const tex = new THREE.Texture(canvas);
+  tex.needsUpdate = true;
+
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent:true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1.4,1.4,1.4);
+  return sprite;
+}
+
+const floatingLabels = [];
+
+function showWaterGainAt(pos, amount){
+  const group = new THREE.Group();
+
+  const iconMat = new THREE.SpriteMaterial({
+    map: waterTexture,
+    transparent:true,
+    opacity:1
+  });
+  const icon = new THREE.Sprite(iconMat);
+  icon.scale.set(1.0,1.0,1.0);
+  icon.position.set(-1.0,0,0);
+  group.add(icon);
+
+  const textSprite = makeTextSprite(`+${amount}`);
+  textSprite.position.set(1.0,0,0);
+  group.add(textSprite);
+
+  group.position.copy(pos).add(new THREE.Vector3(0,2.0,0));
+  group.userData.startTime = clock.getElapsedTime();
+  floatingLabels.push(group);
+  scene.add(group);
+}
+
+/* 포인트 아래 클릭 이펙트 */
+const clickGains = document.getElementById('clickGains');
+function spawnClickGain(amount){
+  const el = document.createElement('div');
+  el.className = 'click-gain';
+  el.innerHTML = `<img src="water.png"><span>+${amount}</span>`;
+  const offset = (Math.random()-0.5) * 40;
+  el.style.left = `calc(50% + ${offset}px)`;
+  clickGains.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 700);
+}
+
+/* 버블 */
+const bubbleGroup = new THREE.Group();
+scene.add(bubbleGroup);
+const bubbles = [];
+const bubbleData = [];
+const AREA = { minX:-40, maxX:40, minZ:-10, maxZ:25, minY:-2, maxY:6 };
+const BUBBLE_COUNT = 260;
+
+function bubbleSize(){ return 0.05 + Math.random()*0.07; }
+
+const bubbleMat = new THREE.MeshBasicMaterial({
+  color:0xffffff,
+  transparent:true,
+  opacity:0.6
+});
+
+for(let i=0;i<BUBBLE_COUNT;i++){
+  const geom = new THREE.SphereGeometry(bubbleSize(),12,12);
+  const mesh = new THREE.Mesh(geom, bubbleMat);
+
+  mesh.position.set(
+    AREA.minX + Math.random()*(AREA.maxX-AREA.minX),
+    AREA.minY + Math.random()*(AREA.maxY-AREA.minY),
+    AREA.minZ + Math.random()*(AREA.maxZ-AREA.minZ)
+  );
+
+  bubbleGroup.add(mesh);
+  bubbles.push(mesh);
+
+  bubbleData.push({
+    speed:0.5+Math.random()*1.2,
+    swayAmp:0.1+Math.random()*0.25,
+    swayFreq:0.5+Math.random()*1.4,
+    phase:Math.random()*Math.PI*2
+  });
+}
+
+/* 애니메이션 루프 */
+const clock = new THREE.Clock();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t  = clock.getElapsedTime();
+
+  controls.update();
+
+  // 버블
+  for(let i=0;i<bubbles.length;i++){
+    const b = bubbles[i];
+    const d = bubbleData[i];
+
+    b.position.y += d.speed * dt;
+    b.position.x += Math.sin(t*d.swayFreq + d.phase) * d.swayAmp * dt;
+
+    if(b.position.y > AREA.maxY){
+      b.position.set(
+        AREA.minX + Math.random()*(AREA.maxX-AREA.minX),
+        AREA.minY,
+        AREA.minZ + Math.random()*(AREA.maxZ-AREA.minZ)
+      );
+    }
+  }
+
+  // 산호/해초: 각도 살짝 + z축 앞뒤 아주 소량 (화면상 살짝살짝)
+  coralInstances.forEach(obj=>{
+    const w = obj.userData.wobble;
+    if(!w) return;
+    const s = Math.sin(t*w.freq + w.phase);
+    obj.rotation.z = w.baseRotZ + s * w.ampRotZ;
+    obj.position.z = w.basePosZ + s * w.ampPosZ;
+  });
+
+  seaweedInstances.forEach(obj=>{
+    const w = obj.userData.wobble;
+    if(!w) return;
+    const s = Math.sin(t*w.freq + w.phase);
+    obj.rotation.z = w.baseRotZ + s * w.ampRotZ;
+    obj.position.z = w.basePosZ + s * w.ampPosZ;
+  });
+
+  // coral floating label
+  const duration = 1.2;
+  for(let i=floatingLabels.length-1;i>=0;i--){
+    const g = floatingLabels[i];
+    const life = t - g.userData.startTime;
+
+    if(life > duration){
+      scene.remove(g);
+      floatingLabels.splice(i,1);
+      continue;
+    }
+
+    g.position.y += 0.7 * dt;
+    const alpha = 1 - life/duration;
+    g.traverse(obj=>{
+      if(obj.material) obj.material.opacity = alpha;
+    });
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* 포인트 & UI */
+let points = 0;
+let clickValue = 1;   // 기본 +1, 해초 사면 +5
+
+function setPoints(v){
+  points = v;
+  document.getElementById('score').textContent =
+    String(points).padStart(8,'0');
+}
+setPoints(9999999);
+
+setInterval(()=>{
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}시 ${m}분 ${s}초`;
+},1000);
+
+/* 클릭: 해초 사기 전엔 +1, 산 뒤엔 전부 +5 */
+document.addEventListener('pointerdown', e=>{
+  if(e.target.closest('.ui-layer')) return;
+  setPoints(points + clickValue);
+  spawnClickGain(clickValue);
+});
+
+/* 상점 */
+const btnShop = document.getElementById('btnShop');
+const shopPopup = document.getElementById('shopPopup');
+const shopClose = document.getElementById('shopClose');
+const goods = document.getElementById('goods');
+
+btnShop.onclick = ()=> shopPopup.classList.toggle('open');
+shopClose.onclick = ()=> shopPopup.classList.remove('open');
+
+let coralTimerStarted = false;
+let coralOwned = false;
+
+goods.onclick = e=>{
+  const card = e.target.closest('.item');
+  if(!card || card.classList.contains('owned')) return;
+
+  const key = card.dataset.key;
+  const price = Number(card.dataset.price);
+  if(points < price) return;
+
+  if(key === 'coral'){
+    setPoints(points - price);
+    card.classList.add('owned');
+    placeCoral();
+    coralOwned = true;
+
+    const seaweedCard = goods.querySelector('.item[data-key="seaweed"]');
+    if(seaweedCard) seaweedCard.classList.remove('locked');
+
+    if(!coralTimerStarted){
+      coralTimerStarted = true;
+      setInterval(()=>{
+        setPoints(points + 10);
+        if(coralInstances.length > 0){
+          showWaterGainAt(coralInstances[0].position, 10);
+        }
+      }, 5000);
+    }
+  }
+
+  if(key === 'seaweed'){
+    if(!coralOwned) return;
+
+    setPoints(points - price);
+    card.classList.add('owned');
+    placeSeaweed();
+
+    // 해초 산 뒤부터는 클릭당 +5
+    clickValue = 5;
+  }
+};
+</script>
+
+</body>
+</html>
